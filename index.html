@@ -690,9 +690,36 @@
       return isTrustedEditorContext();
     }
 
+    function isTrustedPortalMessage(event) {
+      const origin = String(event.origin || "");
+      if (origin === "null") return true;
+      try {
+        const url = new URL(origin);
+        const hostname = String(url.hostname || "").toLowerCase();
+        return hostname === "localhost" || hostname === "127.0.0.1";
+      } catch {
+        return false;
+      }
+    }
+
     window.addEventListener("message", (event) => {
       const data = event.data;
       if (!data) return;
+
+      if (data.type === "bdn-portal-footer-state") {
+        if (!isTrustedPortalMessage(event)) return;
+        frames.footer.contentWindow?.postMessage({
+          type: "bdn-portal-footer-state",
+          state: data.state || null
+        }, "*");
+        if (frames.modalHost.dataset.target === "footer") {
+          frames.modalHost.contentWindow?.postMessage({
+            type: "bdn-portal-footer-state",
+            state: data.state || null
+          }, "*");
+        }
+        return;
+      }
 
       if (data.type === "beacon-auto-reload") {
         autoReloadMinutes = sanitizeReloadMinutes(data.minutes);

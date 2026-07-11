@@ -1415,6 +1415,20 @@
       return isTrustedEditorContext();
     }
 
+    function isTrustedPortalMessage(event) {
+      if (!event) return false;
+      if (event.source && event.source === window.parent) return true;
+      const origin = String(event.origin || "");
+      if (origin === "null") return true;
+      try {
+        const url = new URL(origin);
+        const hostname = String(url.hostname || "").toLowerCase();
+        return hostname === "localhost" || hostname === "127.0.0.1";
+      } catch {
+        return false;
+      }
+    }
+
     function announceStateChanged() {
       if (!window.parent || window.parent === window) return;
       window.parent.postMessage({ type: "beacon-footer-state-updated" }, "*");
@@ -1850,6 +1864,11 @@
       window.addEventListener("message", (event) => {
         const data = event.data;
         if (!data) return;
+        if (data.type === "bdn-portal-footer-state") {
+          if (!isTrustedPortalMessage(event)) return;
+          applySyncState(data.state || {});
+          return;
+        }
         if (data.type === "beacon-request-open" && data.target === "footer") {
           if (!canOpenEmbeddedEditor()) return;
           setModalOpen(true);
