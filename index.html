@@ -696,7 +696,10 @@
       try {
         const url = new URL(origin);
         const hostname = String(url.hostname || "").toLowerCase();
-        return hostname === "localhost" || hostname === "127.0.0.1";
+        return hostname === "localhost"
+          || hostname === "127.0.0.1"
+          || hostname === "bdn-client-portal.pages.dev"
+          || hostname.endsWith(".bdn-client-portal.pages.dev");
       } catch {
         return false;
       }
@@ -721,6 +724,15 @@
         return;
       }
 
+      if (data.type === "bdn-portal-primary-pin") {
+        if (!isTrustedPortalMessage(event)) return;
+        frames.primary.contentWindow?.postMessage({
+          type: "bdn-portal-primary-pin",
+          pinned: Boolean(data.pinned)
+        }, "*");
+        return;
+      }
+
       if (data.type === "beacon-auto-reload") {
         autoReloadMinutes = sanitizeReloadMinutes(data.minutes);
         scheduleAutoReload();
@@ -741,6 +753,14 @@
 
       if (data.type === "beacon-footer-state-updated" || data.type === "beacon-overlay-refresh") {
         frames.overlay.contentWindow?.postMessage({ type: "beacon-overlay-refresh" }, "*");
+        return;
+      }
+
+      if (data.type === "beacon-primary-pin-changed") {
+        setTransientStatus(Boolean(data.pinned)
+          ? "Primary playlist pinned on this NUC."
+          : "Primary playlist returned to region default.");
+        void sendHeartbeat();
         return;
       }
 

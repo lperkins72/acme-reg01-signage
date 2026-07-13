@@ -449,6 +449,21 @@
       return false;
     }
 
+    function isTrustedPortalMessage(event) {
+      const origin = String(event.origin || "");
+      if (origin === "null") return true;
+      try {
+        const url = new URL(origin);
+        const hostname = String(url.hostname || "").toLowerCase();
+        return hostname === "localhost"
+          || hostname === "127.0.0.1"
+          || hostname === "bdn-client-portal.pages.dev"
+          || hostname.endsWith(".bdn-client-portal.pages.dev");
+      } catch {
+        return false;
+      }
+    }
+
     function canOpenEmbeddedEditor() {
       return isTrustedEditorContext();
     }
@@ -718,14 +733,24 @@
     }
 
     function setPlaylistPinned(pinned) {
-      playlistPinned = Boolean(pinned);
+      const nextPinned = Boolean(pinned);
+      const changed = playlistPinned !== nextPinned;
+      playlistPinned = nextPinned;
       localStorage.setItem(PLAYLIST_PINNED_KEY, String(playlistPinned));
       if (playlistPinToggle) {
         playlistPinToggle.checked = playlistPinned;
       }
       updatePlaylistPinStatus();
-      if (!playlistPinned && syncClient) {
-        syncClient.commitNow();
+      if (!changed) {
+        return;
+      }
+      try {
+        window.parent?.postMessage({ type: "beacon-primary-pin-changed", pinned: playlistPinned }, "*");
+      } catch {}
+      if (!playlistPinned) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 120);
       }
     }
 
@@ -1308,7 +1333,13 @@
 
     window.addEventListener("message", (event) => {
       const data = event.data;
-      if (!data || (data.type !== "beacon-request-open" && data.type !== "beacon-request-close")) return;
+      if (!data) return;
+      if (data.type === "bdn-portal-primary-pin") {
+        if (!isTrustedPortalMessage(event)) return;
+        setPlaylistPinned(Boolean(data.pinned));
+        return;
+      }
+      if (data.type !== "beacon-request-open" && data.type !== "beacon-request-close") return;
       if (data.target === "primary") {
         if (data.type === "beacon-request-open" && !canOpenEmbeddedEditor()) return;
         setSettingsVisible(data.type === "beacon-request-open");
