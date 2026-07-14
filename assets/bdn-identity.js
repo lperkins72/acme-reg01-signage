@@ -2,7 +2,7 @@
   const VERSION_PREFIX = "bdn:v1";
   const VALID_ZONES = new Set(["primary", "secondary", "trivia", "footer"]);
   const REGION_SCOPED_ZONES = new Set(["primary", "trivia", "footer"]);
-  const DEVICE_SCOPED_ZONES = new Set(["secondary"]);
+  const DEVICE_SCOPED_ZONES = new Set(["primary", "secondary"]);
 
   function normalizeToken(value) {
     return String(value || "").trim().toLowerCase();

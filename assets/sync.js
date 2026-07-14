@@ -48,6 +48,7 @@
     let lastStateJson = "";
     let commitTimer = null;
     let socket = null;
+    const seedIfMissing = options.seedIfMissing !== false;
 
     function emitStatus() {
       const status = { configured: enabled, connected, ready };
@@ -172,7 +173,7 @@
       const remoteState = await fetchState();
       if (remoteState) {
         applyRemote(remoteState);
-      } else {
+      } else if (seedIfMissing) {
         ready = true;
         await commitNow();
       }
@@ -182,8 +183,26 @@
       return true;
     }
 
+    function stop() {
+      enabled = false;
+      ready = false;
+      if (commitTimer) {
+        clearTimeout(commitTimer);
+        commitTimer = null;
+      }
+      if (socket) {
+        try {
+          socket.close();
+        } catch {}
+        socket = null;
+      }
+      connected = false;
+      emitStatus();
+    }
+
     return {
       start,
+      stop,
       commit,
       commitNow,
       isApplying: () => applying

@@ -415,6 +415,9 @@
     let playlistPinned = false;
     let playbackLog = [];
     let syncClient = null;
+    let syncBaseUrl = "";
+    let activeSyncScope = "";
+    let pinPollTimer = null;
     let assetVersion = "";
 
     function notifyParent(target, open) {
@@ -712,7 +715,7 @@
     function savePlaylists() {
       localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists));
       localStorage.setItem(ACTIVE_PLAYLIST_KEY, activePlaylistName);
-      if (syncClient && !playlistPinned) {
+      if (syncClient) {
         syncClient.commit();
       }
     }
@@ -732,7 +735,8 @@
       updatePlaylistPinStatus();
     }
 
-    function setPlaylistPinned(pinned) {
+    function setPlaylistPinned(pinned, options = {}) {
+      const { broadcast = true } = options;
       const nextPinned = Boolean(pinned);
       const changed = playlistPinned !== nextPinned;
       playlistPinned = nextPinned;
@@ -741,17 +745,161 @@
         playlistPinToggle.checked = playlistPinned;
       }
       updatePlaylistPinStatus();
-      if (!changed) {
+      if (!changed || !broadcast) {
         return;
       }
       try {
         window.parent?.postMessage({ type: "beacon-primary-pin-changed", pinned: playlistPinned }, "*");
       } catch {}
-      if (!playlistPinned) {
-        setTimeout(() => {
-          window.location.reload();
-        }, 120);
+    }
+
+    function buildPrimaryRegionScope() {
+      return window.beaconIdentity?.buildRegionScope?.("primary") || "";
+    }
+
+    function buildPrimaryDeviceScope() {
+      return window.beaconIdentity?.buildDeviceScope?.("primary") || "";
+    }
+
+    async function resolveSyncBaseUrl() {
+      if (syncBaseUrl) return syncBaseUrl;
+      if (window.beaconRuntimeConfig?.getSyncUrl) {
+        syncBaseUrl = await window.beaconRuntimeConfig.getSyncUrl();
       }
+      return syncBaseUrl;
+    }
+
+    function settingsUrlForScope(scope) {
+      if (!syncBaseUrl || !scope) return "";
+      return `${syncBaseUrl}/settings/${encodeURIComponent(scope)}`;
+    }
+
+    async function readScopeState(scope) {
+      const baseUrl = await resolveSyncBaseUrl();
+      const url = settingsUrlForScope(scope);
+      if (!baseUrl || !url) return null;
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) return null;
+        return await response.json();
+      } catch {
+        return null;
+      }
+    }
+
+    async function writeScopeState(scope, state, updatedBy) {
+      const baseUrl = await resolveSyncBaseUrl();
+      const url = settingsUrlForScope(scope);
+      if (!baseUrl || !url) return false;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-BDN-Updated-By": updatedBy || "device-admin"
+        },
+        body: JSON.stringify({
+          state,
+          meta: {
+            updatedBy: updatedBy || "device-admin"
+          }
+        })
+      });
+      return response.ok;
+    }
+
+    async function deleteScopeState(scope, updatedBy) {
+      const baseUrl = await resolveSyncBaseUrl();
+      const url = settingsUrlForScope(scope);
+      if (!baseUrl || !url) return false;
+      const response = await fetch(url, {
+        method: "DELETE",
+        headers: {
+          "X-BDN-Updated-By": updatedBy || "device-admin"
+        }
+      });
+      return response.ok;
+    }
+
+    async function startPrimarySyncClient(scope, seedIfMissing = true) {
+      if (!window.beaconSync || !scope) {
+        return false;
+      }
+      if (syncClient && typeof syncClient.stop === "function") {
+        syncClient.stop();
+      }
+      syncClient = window.beaconSync.createClient({
+        scope,
+        getState: exportSyncState,
+        applyState: applySyncState,
+        seedIfMissing
+      });
+      activeSyncScope = scope;
+      return syncClient.start();
+    }
+
+    function startPrimaryPinPolling() {
+      if (pinPollTimer) {
+        clearInterval(pinPollTimer);
+      }
+      pinPollTimer = setInterval(() => {
+        void refreshPinnedModeFromControlPlane();
+      }, 15000);
+    }
+
+    async function refreshPinnedModeFromControlPlane() {
+      const regionScope = buildPrimaryRegionScope();
+      const deviceScope = buildPrimaryDeviceScope();
+      if (!regionScope || !deviceScope) {
+        return false;
+      }
+
+      const payload = await readScopeState(deviceScope);
+      const hasDeviceOverride = Boolean(payload?.state && typeof payload.state === "object");
+
+      if (hasDeviceOverride) {
+        setPlaylistPinned(true);
+        applySyncState(payload.state);
+        if (activeSyncScope !== deviceScope) {
+          await startPrimarySyncClient(deviceScope, false);
+        }
+        return true;
+      }
+
+      setPlaylistPinned(false);
+      if (activeSyncScope !== regionScope) {
+        await startPrimarySyncClient(regionScope, true);
+      }
+      return false;
+    }
+
+    async function applyPrimaryPinMode(pinned, updatedBy = "device-admin") {
+      const regionScope = buildPrimaryRegionScope();
+      const deviceScope = buildPrimaryDeviceScope();
+      if (!regionScope || !deviceScope) {
+        setPlaylistPinned(Boolean(pinned));
+        return;
+      }
+
+      if (Boolean(pinned)) {
+        const snapshot = exportSyncState();
+        if (!snapshot) {
+          return;
+        }
+        const saved = await writeScopeState(deviceScope, snapshot, updatedBy);
+        if (!saved) {
+          return;
+        }
+        setPlaylistPinned(true);
+        await startPrimarySyncClient(deviceScope, false);
+        return;
+      }
+
+      const deleted = await deleteScopeState(deviceScope, updatedBy);
+      if (!deleted) {
+        return;
+      }
+      setPlaylistPinned(false);
+      await startPrimarySyncClient(regionScope, true);
     }
 
     function getActivePlaylist() {
@@ -1147,7 +1295,7 @@
       mediaFrame.style.setProperty("--dissolve-duration", `${seconds}s`);
       localStorage.setItem(DISSOLVE_ENABLED_KEY, dissolveEnabled);
       localStorage.setItem(DISSOLVE_DURATION_KEY, String(seconds));
-      if (syncClient && !playlistPinned) {
+      if (syncClient) {
         syncClient.commit();
       }
     }
@@ -1164,7 +1312,6 @@
     }
 
     function exportSyncState() {
-      if (playlistPinned) return null;
       return {
         playlists,
         activePlaylistName,
@@ -1175,7 +1322,6 @@
 
     function applySyncState(state) {
       if (!state || typeof state !== "object") return;
-      if (playlistPinned) return;
       if (state.playlists && typeof state.playlists === "object") {
         playlists = state.playlists;
       }
@@ -1316,8 +1462,8 @@
     });
 
     if (playlistPinToggle) {
-      playlistPinToggle.addEventListener("change", () => {
-        setPlaylistPinned(playlistPinToggle.checked);
+      playlistPinToggle.addEventListener("change", async () => {
+        await applyPrimaryPinMode(playlistPinToggle.checked, "screen-local");
       });
     }
 
@@ -1331,12 +1477,12 @@
       updateLogStatus();
     });
 
-    window.addEventListener("message", (event) => {
+    window.addEventListener("message", async (event) => {
       const data = event.data;
       if (!data) return;
       if (data.type === "bdn-portal-primary-pin") {
         if (!isTrustedPortalMessage(event)) return;
-        setPlaylistPinned(Boolean(data.pinned));
+        await applyPrimaryPinMode(Boolean(data.pinned), "portal-admin");
         return;
       }
       if (data.type !== "beacon-request-open" && data.type !== "beacon-request-close") return;
@@ -1416,20 +1562,20 @@
       renderPlaylistItems();
       loadDissolveSettings();
       loadPlaybackLog();
+      if (window.beaconSync) {
+        syncBaseUrl = await resolveSyncBaseUrl();
+        const usingDeviceOverride = await refreshPinnedModeFromControlPlane();
+        if (!usingDeviceOverride) {
+          await startPrimarySyncClient(buildPrimaryRegionScope() || window.beaconIdentity?.buildSyncScope?.("primary") || "primary", true);
+        }
+        startPrimaryPinPolling();
+      }
+
       const resume = resolveResumePlayback(getActivePlaylist());
       if (resume) {
         startPlaybackAt(resume.index, resume.offsetMs);
       } else {
         startPlayback();
-      }
-
-      if (window.beaconSync) {
-        syncClient = window.beaconSync.createClient({
-          scope: window.beaconIdentity?.buildSyncScope?.("primary") || "primary",
-          getState: exportSyncState,
-          applyState: applySyncState
-        });
-        syncClient.start();
       }
     })();
   </script>
