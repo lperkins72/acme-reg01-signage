@@ -554,6 +554,23 @@
       return { tenant, region, device };
     }
 
+    function notifyPortalPinChanged(pinned) {
+      const info = getHeartbeatInfo();
+      if (!info || !window.opener || window.opener === window) return;
+      try {
+        window.opener.postMessage({
+          type: "bdn-portal-primary-pin-ack",
+          tenant: info.tenant,
+          region: info.region,
+          device: info.device,
+          pinned: Boolean(pinned),
+          ts: Date.now()
+        }, "*");
+      } catch {
+        // Portal ack is advisory only.
+      }
+    }
+
     function buildHeartbeatPayload(info) {
       const schedule = getHeartbeatSchedule(heartbeatPolicy);
       return {
@@ -760,6 +777,7 @@
         setTransientStatus(Boolean(data.pinned)
           ? "Primary playlist pinned on this NUC."
           : "Primary playlist returned to region default.");
+        notifyPortalPinChanged(Boolean(data.pinned));
         void sendHeartbeat();
         return;
       }
