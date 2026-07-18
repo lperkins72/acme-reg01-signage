@@ -1,4 +1,4 @@
-const CACHE_VERSION = "2026-07-09-2";
+const CACHE_VERSION = "2026-07-18-1";
 const APP_CACHE = `beacon-app-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `beacon-runtime-${CACHE_VERSION}`;
 const MEDIA_CACHE = `beacon-media-${CACHE_VERSION}`;
