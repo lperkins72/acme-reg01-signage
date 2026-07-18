@@ -1,4 +1,4 @@
-const CACHE_VERSION = "2026-07-18-1";
+const CACHE_VERSION = "2026-07-18-2";
 const APP_CACHE = `beacon-app-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `beacon-runtime-${CACHE_VERSION}`;
 const MEDIA_CACHE = `beacon-media-${CACHE_VERSION}`;
@@ -18,9 +18,11 @@ const APP_SHELL = [
   "assets/kiosk-color-picker.js",
   "assets/tiny-pixel-clock-v2.js",
   "assets/triviatimebeaconlogo.png",
+  "assets/icons/clear-night.svg",
   "assets/icons/cloudy.svg",
   "assets/icons/fog.svg",
   "assets/icons/partly-cloudy.svg",
+  "assets/icons/partly-cloudy-night.svg",
   "assets/icons/rain.svg",
   "assets/icons/snow.svg",
   "assets/icons/storm.svg",
