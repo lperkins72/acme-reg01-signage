@@ -110,14 +110,21 @@
       z-index: 3;
     }
 
+    .primary-ending-shell {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 100%;
+      background: #000000;
+      overflow: hidden;
+    }
+
     .primary-ending {
       width: 100%;
       height: 100%;
       border: 0;
       display: block;
       background: #000000;
-      flex: 1 1 auto;
-      min-width: 0;
     }
 
     body.trivia-settings-open {
@@ -128,12 +135,19 @@
       display: none;
     }
 
-    body.trivia-settings-open .primary-ending {
+    body.trivia-settings-open .primary-ending-shell {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
       flex: none;
+    }
+
+    body.trivia-settings-open .primary-ending {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
     }
 
     #settingsModal {
@@ -336,16 +350,18 @@
       <img id="mediaImageA" class="media-image" alt="">
       <img id="mediaImageB" class="media-image" alt="">
       <video id="mediaVideo" class="media-video" muted playsinline></video>
-      <div class="trivia-overlay" id="triviaOverlay" aria-hidden="true">
-        <img id="triviaOverlayImage" class="trivia-overlay-media" alt="">
-        <video id="triviaOverlayVideo" class="trivia-overlay-media" muted playsinline loop></video>
-        <iframe id="triviaOverlayFrame" class="trivia-overlay-media" title="Trivia Sponsor Overlay" tabindex="-1"></iframe>
-      </div>
       <div class="media-placeholder" id="mediaPlaceholder">No media configured</div>
     </div>
   </section>
 
-  <iframe class="primary-ending" id="primaryEndingFrame" src="primaryending.html" title="Trivia Panel" scrolling="no"></iframe>
+  <div class="primary-ending-shell">
+    <iframe class="primary-ending" id="primaryEndingFrame" src="primaryending.html" title="Trivia Panel" scrolling="no"></iframe>
+    <div class="trivia-overlay" id="triviaOverlay" aria-hidden="true">
+      <img id="triviaOverlayImage" class="trivia-overlay-media" alt="">
+      <video id="triviaOverlayVideo" class="trivia-overlay-media" muted playsinline loop></video>
+      <iframe id="triviaOverlayFrame" class="trivia-overlay-media" title="Trivia Sponsor Overlay" tabindex="-1"></iframe>
+    </div>
+  </div>
 
   <div id="settingsModal">
     <div class="modal-panel">
@@ -2276,3 +2292,4 @@
   </script>
 </body>
 </html>
+
